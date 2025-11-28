@@ -15,7 +15,7 @@ export const TreeView: React.FC<Props> = ({
     data,
     onSelectSpecies,
     highlightedSpeciesId,
-    initialDepth = 1, // by defaullt show only top-level branches
+    initialDepth = 1, // by default show only top-level branches
 }) => {
     const containerRef = useRef<HTMLDivElement | null>(null)
     const [size, setSize] = useState({ width: 0, height: 0 })
@@ -43,6 +43,23 @@ export const TreeView: React.FC<Props> = ({
         }
     }, [])
 
+    const isMobile = size.width <= 640
+
+    // more compact layout on mobile so the whole tree fits into the panel
+    const nodeSize = isMobile
+        ? { x: 80, y: 100 }        // phones: compress horizontal spacing
+        : { x: 320, y: 140 }       // desktop / tablets
+
+    const separation = isMobile
+        ? { siblings: 1.0, nonSiblings: 1.1 }
+        : { siblings: 0.6, nonSiblings: 0.5 }
+
+    const translate = {
+        // on mobile push root a bit to the right so branches fit on screen
+        x: size.width * (isMobile ? 0.25 : 0.08),
+        y: size.height * 0.5,
+    }
+
     // get speciesId from various possible node structures
     const getSpeciesId = (nodeDatum: any): string | undefined => {
         if (!nodeDatum) return undefined
@@ -55,11 +72,6 @@ export const TreeView: React.FC<Props> = ({
         if (typeof nodeDatum?.data?.attributes?.speciesId === 'string') return nodeDatum.data.attributes.speciesId
 
         return undefined
-    }
-
-    const translate = {
-        x: size.width * 0.08,
-        y: size.height * 0.5,
     }
 
     // custom rendering of nodes to handle clicks and styling
@@ -123,10 +135,10 @@ export const TreeView: React.FC<Props> = ({
                     orientation="horizontal"
                     pathFunc="diagonal"
                     translate={translate}
-                    separation={{ siblings: 0.6, nonSiblings: 0.5 }}
-                    nodeSize={{ x: 320, y: 140 }}
+                    separation={separation}
+                    nodeSize={nodeSize}
                     zoomable={true}
-                    scaleExtent={{ min: 0.8, max: 1.8 }}
+                    scaleExtent={{ min: 0.5, max: 1.8 }} // allow pinch-zoom on phones
                     collapsible={true}
                     initialDepth={initialDepth}
                     renderCustomNodeElement={renderCustomNodeElement}
