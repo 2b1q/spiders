@@ -1,5 +1,6 @@
 import React from 'react'
 import { Species } from '../types'
+import { getSpeciesImageUrl } from '../utils/imageUrl'
 
 interface Props {
     species?: Species | null
@@ -7,6 +8,21 @@ interface Props {
     onToggleFavorite: () => void
     isInCompare: boolean
     onToggleCompare: () => void
+}
+
+const renderExperienceLevel = (level?: Species['experienceLevel']) => {
+    if (!level) return 'не указано'
+
+    switch (level) {
+        case 'beginner':
+            return 'подходит новичкам'
+        case 'intermediate':
+            return 'для владельцев с базовым опытом'
+        case 'advanced':
+            return 'для опытных владельцев'
+        default:
+            return level
+    }
 }
 
 export const InfoPanel: React.FC<Props> = ({
@@ -25,21 +41,27 @@ export const InfoPanel: React.FC<Props> = ({
         )
     }
 
-    const experienceText =
-        species.experienceLevel === 'beginner'
-            ? 'подходит для новичков'
-            : species.experienceLevel === 'intermediate'
-                ? 'для владельцев с базовым опытом'
-                : species.experienceLevel === 'advanced'
-                    ? 'только для опытных держателей'
-                    : '—'
+    const placeholderImg = '/images/spider-placeholder.webp'
+    const primaryImage = getSpeciesImageUrl(species)
+    const [imgSrc, setImgSrc] = React.useState(primaryImage ?? placeholderImg)
+
+    React.useEffect(() => {
+        setImgSrc(primaryImage ?? placeholderImg)
+    }, [primaryImage])
+
+    const isPlaceholder = imgSrc === placeholderImg
 
     return (
         <div className="info-panel">
             <h2>{species.name}</h2>
-            {species.imageUrl && (
-                <img src={species.imageUrl} alt={species.name} className="info-image" />
-            )}
+
+            <img
+                src={imgSrc}
+                alt={species.name}
+                className={`info-image ${isPlaceholder ? 'info-image--placeholder' : ''}`}
+                onError={() => setImgSrc(placeholderImg)}
+            />
+
             <p>
                 <strong>Род:</strong> {species.genus}
             </p>
@@ -64,11 +86,13 @@ export const InfoPanel: React.FC<Props> = ({
                         : '☣ высокая токсичность'}
             </p>
             <p>
-                <strong>Уровень опыта владельца:</strong> {experienceText}
-            </p>
-            <p>
                 <strong>Размер адульта:</strong> ~{species.adultSizeCm} см DLS
             </p>
+            {species.experienceLevel && (
+                <p>
+                    <strong>Опыт владельца:</strong> {renderExperienceLevel(species.experienceLevel)}
+                </p>
+            )}
 
             <p className="info-short">{species.descriptionShort}</p>
 
