@@ -5,31 +5,6 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import https from 'node:https'
 
-/**
- * Simple uploader for species images.
- *
- * Usage examples:
- *
- *   # with default JSON (src/tools/species-images.json)
- *   npx tsx src/tools/upload-images.ts --bucket <your_project>.firebasestorage.app
- *
- *   # with explicit JSON and prefix inside the bucket
- *   npx tsx src/tools/upload-images.ts \
- *     --bucket <your_project>.firebasestorage.app \
- *     --json src/tools/species-images.json \
- *     --prefix species
- *
- *   # if some sources have broken TLS (NOT recommended for production)
- *   npx tsx src/tools/upload-images.ts \
- *     --bucket <your_project>.firebasestorage.app \
- *     --prefix species \
- *     --insecure
- *
- * Requirements:
- *   - gcloud auth application-default login
- *   - GCS bucket already exists and you have write access
- */
-
 type ImageItem = {
     id: string
     sourceUrl: string
@@ -60,7 +35,7 @@ function printUsage(): void {
             'Positional compatibility:',
             '  If you still call: npx tsx ... <bucket-name>',
             '  it will be treated as --bucket <bucket-name>.',
-        ].join('\n')
+        ].join('\n'),
     )
 }
 
@@ -112,9 +87,7 @@ async function loadImages(jsonPath?: string): Promise<ImageItem[]> {
 }
 
 async function main() {
-    const { bucket: bucketName, jsonPath, prefix, insecure } = parseArgs(
-        process.argv
-    )
+    const { bucket: bucketName, jsonPath, prefix, insecure } = parseArgs(process.argv)
 
     console.log('Bucket:', bucketName)
     console.log('JSON file:', jsonPath ?? 'src/tools/species-images.json (default)')
@@ -130,49 +103,58 @@ async function main() {
     for (const item of items) {
         console.log(`Processing ${item.id}...`)
 
-        const res = await fetch(item.sourceUrl, {
-            agent: insecure ? insecureAgent : undefined,
-        })
-
-        if (!res.ok) {
-            console.error(
-                'Failed to download',
-                item.sourceUrl,
-                res.status,
-                res.statusText
-            )
+        if (!item.sourceUrl || !item.sourceUrl.trim()) {
+            console.warn(`  Skipping ${item.id}: empty sourceUrl`)
             continue
         }
 
-        const buffer = await res.arrayBuffer()
-
-        const optimized = await sharp(Buffer.from(buffer))
-            .rotate() // respect EXIF orientation
-            // Same aspect ratio as info panel (900x550)
-            .resize(TARGET_WIDTH, TARGET_HEIGHT, {
-                fit: 'cover',
-                // "entropy" tries to crop around the most "detailed" area (usually the spider)
-                position: 'entropy',
+        try {
+            const res = await fetch(item.sourceUrl, {
+                agent: insecure ? insecureAgent : undefined,
             })
-            .webp({ quality: 80 })
-            .toBuffer()
 
-        const filePath = `${prefix}/${item.id}/main.webp`
-        const file = bucket.file(filePath)
+            if (!res.ok) {
+                console.error(`  Failed to download ${item.sourceUrl}:`, res.status, res.statusText)
+                continue
+            }
 
-        await file.save(optimized, {
-            contentType: 'image/webp',
-            resumable: false,
-        })
+            const contentType = res.headers.get('content-type') || ''
+            if (!contentType.startsWith('image/')) {
+                console.error(`  Skipping ${item.id}: URL did not return an image (content-type="${contentType}")`)
+                continue
+            }
 
-        await file.setMetadata({
-            cacheControl: 'public, max-age=31536000',
-            metadata: {},
-        })
+            const buffer = await res.arrayBuffer()
 
-        await file.makePublic()
+            const optimized = await sharp(Buffer.from(buffer))
+                .rotate()
+                .resize(TARGET_WIDTH, TARGET_HEIGHT, {
+                    fit: 'cover',
+                    position: 'entropy',
+                })
+                .webp({ quality: 80 })
+                .toBuffer()
 
-        console.log(`Uploaded https://storage.googleapis.com/${bucketName}/${filePath}`)
+            const filePath = `${prefix}/${item.id}/main.webp`
+            const file = bucket.file(filePath)
+
+            await file.save(optimized, {
+                contentType: 'image/webp',
+                resumable: false,
+            })
+
+            await file.setMetadata({
+                cacheControl: 'public, max-age=31536000',
+                metadata: {},
+            })
+
+            await file.makePublic()
+
+            console.log(`  Uploaded https://storage.googleapis.com/${bucketName}/${filePath}`)
+        } catch (err: any) {
+            console.error(`  Failed to process ${item.id}:`, err?.message || err)
+            continue
+        }
     }
 
     console.log('Done.')
