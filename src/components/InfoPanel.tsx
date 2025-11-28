@@ -41,7 +41,7 @@ export const InfoPanel: React.FC<Props> = ({
         )
     }
 
-    const placeholderImg = '/images/spider-placeholder.webp'
+    const placeholderImg = '/images/spider-placeholder-v1.webp'
     const primaryImage = getSpeciesImageUrl(species)
     const [imgSrc, setImgSrc] = React.useState(primaryImage ?? placeholderImg)
 
