@@ -94,6 +94,10 @@ async function main() {
     console.log('Bucket prefix:', prefix)
     console.log('Insecure TLS:', insecure ? 'ON' : 'OFF')
 
+    const skipped = {
+        empty: [] as string[],
+        failed: [] as string[]
+    }
     const storage = new Storage()
     const bucket = storage.bucket(bucketName)
     const items = await loadImages(jsonPath)
@@ -105,6 +109,7 @@ async function main() {
 
         if (!item.sourceUrl || !item.sourceUrl.trim()) {
             console.warn(`  Skipping ${item.id}: empty sourceUrl`)
+            skipped.empty.push(item.id)
             continue
         }
 
@@ -115,12 +120,14 @@ async function main() {
 
             if (!res.ok) {
                 console.error(`  Failed to download ${item.sourceUrl}:`, res.status, res.statusText)
+                skipped.failed.push(item.id)
                 continue
             }
 
             const contentType = res.headers.get('content-type') || ''
             if (!contentType.startsWith('image/')) {
                 console.error(`  Skipping ${item.id}: URL did not return an image (content-type="${contentType}")`)
+                skipped.failed.push(item.id)
                 continue
             }
 
@@ -157,6 +164,7 @@ async function main() {
         }
     }
 
+    console.dir(skipped, { depth: null, colors: true })
     console.log('Done.')
 }
 
