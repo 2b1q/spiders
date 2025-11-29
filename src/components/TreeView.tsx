@@ -19,6 +19,7 @@ export const TreeView: React.FC<Props> = ({
 }) => {
     const containerRef = useRef<HTMLDivElement | null>(null)
     const [size, setSize] = useState({ width: 0, height: 0 })
+    const [showHint, setShowHint] = useState(false)
 
     useEffect(() => {
         if (!containerRef.current) return
@@ -45,22 +46,27 @@ export const TreeView: React.FC<Props> = ({
 
     const isMobile = size.width <= 640
 
+    // enable hint whenever we are on mobile layout
+    useEffect(() => {
+        if (isMobile) {
+            setShowHint(true)
+        } else {
+            setShowHint(false)
+        }
+    }, [isMobile])
+
     // more compact layout on mobile so the whole tree fits into the panel
-    const nodeSize = isMobile
-        ? { x: 80, y: 100 }        // phones: compress horizontal spacing
-        : { x: 320, y: 140 }       // desktop / tablets
+    const nodeSize = isMobile ? { x: 80, y: 100 } : { x: 320, y: 140 }
 
     const separation = isMobile
         ? { siblings: 1.0, nonSiblings: 1.1 }
         : { siblings: 0.6, nonSiblings: 0.5 }
 
     const translate = {
-        // on mobile push root a bit to the right so branches fit on screen
         x: size.width * (isMobile ? 0.25 : 0.08),
         y: size.height * 0.5,
     }
 
-    // get speciesId from various possible node structures
     const getSpeciesId = (nodeDatum: any): string | undefined => {
         if (!nodeDatum) return undefined
 
@@ -69,12 +75,13 @@ export const TreeView: React.FC<Props> = ({
         if (typeof raw?.speciesId === 'string') return raw.speciesId
         if (typeof raw?.attributes?.speciesId === 'string') return raw.attributes.speciesId
         if (typeof nodeDatum?.attributes?.speciesId === 'string') return nodeDatum.attributes.speciesId
-        if (typeof nodeDatum?.data?.attributes?.speciesId === 'string') return nodeDatum.data.attributes.speciesId
+        if (typeof nodeDatum?.data?.attributes?.speciesId === 'string') {
+            return nodeDatum.data.attributes.speciesId
+        }
 
         return undefined
     }
 
-    // custom rendering of nodes to handle clicks and styling
     const renderCustomNodeElement = ({
         nodeDatum,
         toggleNode,
@@ -96,8 +103,21 @@ export const TreeView: React.FC<Props> = ({
             .filter(Boolean)
             .join(' ')
 
+        // node metadata can live under `data` – use it as a source of truth
+        const raw = nodeDatum.data ?? nodeDatum
+        const isLifestyleNode = raw?.nodeType === 'lifestyle'
+        const isTerrestrialLifestyle = raw?.lifestyle === 'terrestrial'
+
+        // we show hint on mobile for one lifestyle node
+        const isHintTarget = showHint && isMobile && isLifestyleNode && isTerrestrialLifestyle
+
         const handleClick = () => {
-            // leaf node - get species ID and call onSelectSpecies
+            // hide hint after first interaction with the tree on mobile
+            if (showHint && isMobile) {
+                setShowHint(false)
+            }
+
+            // leaf node - call selection handler
             if (isLeafNode && id && onSelectSpecies) {
                 onSelectSpecies(id)
                 return
@@ -122,6 +142,24 @@ export const TreeView: React.FC<Props> = ({
                             {nodeDatum.name}
                         </text>
                     )}
+
+                    {isHintTarget && (
+                        <g className="tree-hint-group" transform="translate(46, 10)">
+                            <rect
+                                className="tree-hint-bubble"
+                                x={-26}
+                                y={-26}
+                                width={58}
+                                height={22}
+                                rx={11}
+                                ry={11}
+                            />
+                            <polygon className="tree-hint-arrow" points="-4,-4 6,-4 1,5" />
+                            <text className="tree-hint-text" textAnchor="middle" x={3} y={-11}>
+                                тык
+                            </text>
+                        </g>
+                    )}
                 </g>
             </g>
         )
@@ -138,7 +176,7 @@ export const TreeView: React.FC<Props> = ({
                     separation={separation}
                     nodeSize={nodeSize}
                     zoomable={true}
-                    scaleExtent={{ min: 0.5, max: 1.8 }} // allow pinch-zoom on phones
+                    scaleExtent={{ min: 0.5, max: 1.8 }}
                     collapsible={true}
                     initialDepth={initialDepth}
                     renderCustomNodeElement={renderCustomNodeElement}
